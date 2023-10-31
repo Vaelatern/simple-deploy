@@ -1,0 +1,155 @@
+#!/bin/bash
+# Run this after : git fetch -pPa
+VERSION=0.0.1
+
+[ -n "$DEBUG" ] && exec 4>&2 && echo "Debugging mode on" >&4
+
+: ${GIT_DIR:=./bare.git}
+: ${WORKTREE_ROOT:=worktrees/}
+export GIT_DIR WORKTREE_ROOT
+
+case "$WORKTREE_ROOT" in
+	*/);; # Trailing slash, good, else we'd append one
+	*) export WORKTREE_ROOT="${WORKTREE_ROOT}/";;
+esac
+
+STATE=0
+BRANCH=
+# STATE | BRANCH :
+# 0     | empty  : unacquired
+# 1     | "..."  : local found
+# 2     | "..."  : remote found
+
+EXPLANATION=<<'EOF'
+```d2
+Local?
+IsLocalIsRemote?: Is Remote?
+IsNotLocalIsRemote?: Is Remote?
+
+Add
+Update
+Remove
+
+Local? -> IsLocalIsRemote?: Yes
+Local? -> IsNotLocalIsRemote?: No
+IsLocalIsRemote? -> Remove: No
+IsLocalIsRemote? -> Update: Yes
+IsNotLocalIsRemote? -> Add: Yes
+```
+
+So we process branches 1 at a time, and we rely on refs/heads being
+alphabetically before refs/remotes to see local branches before remote branches
+
+As you gain the remote branch, we take actions
+We don't make actions upon gaining the local branch, we won't yet have enough information.
+
+last-seen		current			action
+lBranch	lLocality	cBranch	cLocality	action
+-	-		X	remote		Add X
+-	-		X	local		-
+X	local		X	remote		Update X
+X	local		X	local		Bug, crash
+X	local		Y	remote		Remove X, Add Y
+X	local		Y	local		Remove X
+X	local		-	-		Remove X
+X	remote		X	remote		Bug, crash
+X	remote		X	local		Bug, crash
+X	remote		Y	remote		Add Y
+X	remote		Y	local		-
+X	remote		-	-		-
+
+EOF
+
+debug() {
+	[ -n "$DEBUG" ] && echo "$1" >&4
+}
+
+errorexit() {
+	echo "$1"
+	exit "$2"
+}
+
+add_or_update() {
+	WORKTREE="$WORKTREE_ROOT""$1"
+	git branch -D "$1" 2>/dev/null
+	[ -d "$WORKTREE" ] ||
+		git worktree add --track "$WORKTREE" "$1"
+	remote_branch=$(git for-each-ref --format='%(upstream:short)' refs/heads/"$1")
+	git diff --exit-code "$1" "$remote_branch" >/dev/null ||
+		GIT_DIR="${WORKTREE}/.git" git pull -f
+}
+
+remove() {
+	WORKTREE="$WORKTREE_ROOT""$1"
+	git worktree remove "$1"
+	git branch -D "$1"
+	rmdir -p "$WORKTREE"
+}
+
+###### Pipeline Begins
+###### Our work commences
+###### Make all branches on the remote live worktrees, and all others removed
+
+{
+	git for-each-ref --format='%(refname)' | while IFS= read -r refname; do
+	case "$refname" in
+		refs/heads/*)
+			printf "%s\t%s\tlocal\n" "${refname#refs/heads/}" "$refname"
+			debug "$refname"
+			;;
+		refs/remotes/*)
+			printf "%s\t%s\tremote\n" "${refname#refs/remotes/*/}" "$refname"
+			debug "$refname"
+			;;
+	esac
+done | sort
+printf "END\tEND\tEND\n"
+} | while IFS='	' read -r shortname refname locality; do
+	# We keep refname around for the sorting of local then remote,
+	# and also easy debugging later. We don't use it in this loop body
+	[ "$locality" = "END" ] && case $STATE in
+				0);;
+				1) printf "REMOVE\t%s" "$BRANCH";;
+				2);;
+			esac && break
+
+	case "$STATE$locality" in
+		0local);;
+		0remote) printf "ADD\t%s\n" "$shortname";;
+		1local) [ "$BRANCH" = "$shortname" ] &&
+			errorexit "same branch seen twice - bug" 99 ||
+			printf "REMOVE\t%s\n" "$BRANCH";;
+		1remote) [ "$BRANCH" = "$shortname" ] &&
+			printf "UPDATE\t%s\n" "$shortname" ||
+			printf "REMOVE\t%s\nADD\t%s\n" "$BRANCH" "$shortname";;
+		2local) [ "$BRANCH" = "$shortname" ] &&
+			errorexit "remote before local - bug" 99;;
+		2remote) [ "$BRANCH" = "$shortname" ] &&
+			errorexit "remote branch seen twice - bug" 99 ||
+			printf "ADD\t%s\n" "$shortname";;
+	esac
+
+	BRANCH="$shortname"
+	case "$locality" in
+		local)
+			STATE=1
+			;;
+		remote)
+			STATE=2
+			;;
+	esac
+done | while IFS='	' read -r action branchname; do
+	debug "$action $branchname"
+	case "$action" in
+		ADD|UPDATE) add_or_update "$branchname";
+			echo "$branchname";;
+		REMOVE) remove "$branchname";;
+	esac
+done | sort | comm -13 -- - <(find "$WORKTREE_ROOT" -maxdepth 1 -type d -printf %f\\n | tail -n +2 | sort ) |
+	awk '{ print ENVIRON["WORKTREE_ROOT"]$0 }' |
+	xargs rm -rf # Remove any trailing directories we don't know about
+# Remove is stateful. What if we missed the remove but a directory hung around?
+# Hence the final remove chain
+# -f to ignore if nothing is found to remove
+# The <() is the only bash feature used in this script, and the only reason
+# this couldn't be executed in dash

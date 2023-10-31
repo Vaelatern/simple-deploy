@@ -1,0 +1,25 @@
+#!/bin/sh
+# REMOTE=https://github.com/example/repo.git GIT_DIR=./bare.git WORKTREE_ROOT=./worktrees/ update
+# defaults to looking for the script in `./workdirs`, customizable with WORKTREES_SCRIPT=
+
+VERSION=0.0.1
+
+: ${GIT_DIR:=./bare.git}
+: ${WORKTREE_ROOT:=./worktrees/}
+: ${WORKTREES_SCRIPT:=./workdirs}
+
+export GIT_DIR WORKTREE_ROOT
+
+[ ! -d "$GIT_DIR" -a -z "$REMOTE" ] && echo "Please set a REMOTE repo to clone" && exit 1
+[ ! -d "$GIT_DIR" ] && git clone --bare "$REMOTE" "$GIT_DIR"
+
+# Not default for bare checkouts.
+# We rely on having fetch set for the remote
+# So we will set this if the current config is empty (non-zero exit code)
+git config remote.origin.fetch || git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+
+git fetch --prune-tags --prune --tags --all --append --force
+
+[ ! -d "$WORKTREE_ROOT" ] && mkdir -p "$WORKTREE_ROOT"
+
+"$WORKTREES_SCRIPT"
