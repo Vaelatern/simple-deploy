@@ -13,6 +13,10 @@ case "$WORKTREE_ROOT" in
 	*) export WORKTREE_ROOT="${WORKTREE_ROOT}/";;
 esac
 
+# State tracking variables for our state machine
+# Only used in one place, much later, but set here
+# so they can be properly documented without distracting
+# from the code
 STATE=0
 BRANCH=
 # STATE | BRANCH :
@@ -71,6 +75,10 @@ errorexit() {
 
 add_or_update() {
 	WORKTREE="$WORKTREE_ROOT""$1"
+	# Why did I add a git branch -D here?
+	# I think because it has no effect if a worktree is checked out
+	# But if there is no worktree, it solves a failure mode where the
+	# branch is not sufficiently tracking upstream
 	git branch -D "$1" 2>/dev/null
 	[ -d "$WORKTREE" ] ||
 		git worktree add --track "$WORKTREE" "$1"
