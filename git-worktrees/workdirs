@@ -85,7 +85,7 @@ add_or_update() {
 	remote_branch=$(git for-each-ref --format='%(upstream:short)' refs/heads/"$1")
 	# In event the diff is clean, exit code is 0
 	if git diff --exit-code "$1" "$remote_branch" >/dev/null; then
-		exit 0
+		return
 	fi
 	GIT_DIR="${WORKTREE}/.git" git pull -f
 	# then, if should do something...
