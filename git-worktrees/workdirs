@@ -6,7 +6,7 @@ VERSION=0.0.1
 
 : ${GIT_DIR:=./bare.git}
 : ${WORKTREE_ROOT:=worktrees/}
-export GIT_DIR WORKTREE_ROOT
+export GIT_DIR WORKTREE_ROOT HOOK_UPDATE HOOK_REMOVE
 
 case "$WORKTREE_ROOT" in
 	*/);; # Trailing slash, good, else we'd append one
@@ -83,8 +83,13 @@ add_or_update() {
 	[ -d "$WORKTREE" ] ||
 		git worktree add --track "$WORKTREE" "$1"
 	remote_branch=$(git for-each-ref --format='%(upstream:short)' refs/heads/"$1")
-	git diff --exit-code "$1" "$remote_branch" >/dev/null ||
-		GIT_DIR="${WORKTREE}/.git" git pull -f
+	# In event the diff is clean, exit code is 0
+	if git diff --exit-code "$1" "$remote_branch" >/dev/null; then
+		exit 0
+	fi
+	GIT_DIR="${WORKTREE}/.git" git pull -f
+	# then, if should do something...
+	[ -x "${HOOK_UPDATE}" ] && "${HOOK_UPDATE}" "$1"
 }
 
 remove() {
@@ -92,6 +97,8 @@ remove() {
 	git worktree remove "$1"
 	git branch -D "$1"
 	rmdir -p "$WORKTREE"
+	# then, if should do something...
+	[ -x "${HOOK_REMOVE}" ] && "${HOOK_REMOVE}" "$1"
 }
 
 ###### Pipeline Begins

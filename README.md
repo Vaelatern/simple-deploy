@@ -22,3 +22,6 @@ run it every 1-60 minutes to sync your remote with the server.
 Running a task every few minutes is a solved problem on Linux in so many
 ways, so with this script already written and available, you can get going
 much faster.
+
+What if you need to execute something every update, such as an rsync, or
+re-triggering a build + deploy run? Set a hook here to do that.
