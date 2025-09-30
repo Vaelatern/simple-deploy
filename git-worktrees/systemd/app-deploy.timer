@@ -1,0 +1,9 @@
+[Unit]
+Description=Regularly poll git for new changes
+
+[Timer]
+OnActiveSec=1m
+OnUnitInactiveSec=1m
+
+[Install]
+WantedBy=timers.target

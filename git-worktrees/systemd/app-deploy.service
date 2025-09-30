@@ -1,0 +1,12 @@
+[Unit]
+Description=Update website
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/MYUSER/
+Environment=REMOTE=https://github.com/Vaelatern/simple-deploy
+Environment=GIT_DIR=/path/to/bare/git/repository
+Environment=WORKTREE_ROOT=/path/to/working/git/repositories/NOTE/NOT/UNDER/GIT/DIR
+Environment=WORKTREES_SCRIPT=/path/to/workdirs
+ExecStart=/path/to/update
+User=MYUSER
