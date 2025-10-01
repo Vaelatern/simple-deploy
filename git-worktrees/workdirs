@@ -87,7 +87,8 @@ add_or_update() {
 	if git diff --exit-code "$1" "$remote_branch" >/dev/null; then
 		return
 	fi
-	GIT_DIR="${WORKTREE}/.git" git pull -f
+	GIT_DIR="${WORKTREE}/.git" git pull -f # Get the latest commit
+        GIT_DIR="${WORKTREE}/.git" git reset --hard # Clear the working tree
 	# then, if should do something...
 	[ -x "${HOOK_UPDATE}" ] && "${HOOK_UPDATE}" "$1"
 }
