@@ -90,7 +90,7 @@ add_or_update() {
 	# Subshell to not clobber CWD.
 	(
 		cd "${WORKTREE}"
-		GIT_DIR="${WORKTREE}/.git" git pull -f # Get the latest commit - must be in working tree.
+		GIT_DIR="${WORKTREE}/.git" git reset --hard "$remote_branch" # Get the latest commit - must be in working tree.
 		# then, if should do something...
 		[ -x "${HOOK_UPDATE}" ] && "${HOOK_UPDATE}" "$1"
 	)
